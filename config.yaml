@@ -1,0 +1,11 @@
+repeat: 1
+pop_size: 100
+num_iter: 5000
+sbxdi: 10
+pmdi: 10
+pswap: 0.5
+dimension: 30
+rmp: 0.3
+max_fes: 500000
+F: 0.5
+CE: 0.9
