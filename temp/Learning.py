@@ -6,7 +6,7 @@ from GNBG import GNBG
 import copy
 from scipy.optimize import fmin_l_bfgs_b
 from Searcher import *
-
+import sys
 class SubPop():
     def __init__(self, pool, prob, searcher=None):
         self.list_tasks = prob
@@ -127,34 +127,35 @@ class LearningPhaseILS():
         
         #####################################################
                 
-        # ratio_improvement = this_iteration_searcher.effective
-        # if ratio_improvement > 1e-5:
-        #     self.stay = 0
-        # else:
-        #     self.stay += 1
-        #     for _searcher in self.searcher:
-        #         _searcher.reset()
-        #     if self.stay > 3:
-        #         self.stay = 0
-        #         subpop = self.restart(subpop)
+        ratio_improvement = this_iteration_searcher.effective
+        if ratio_improvement > 1e-5:
+            self.stay = 0
+        else:
+            self.stay += 1
+            for _searcher in self.searcher:
+                _searcher.reset()
+            if self.stay > 15:
+                subpop = self.restart(subpop)
+
         return subpop
     def restart(self, subpop):
-        print("RESTART!", subpop[0].skill_factor)
+        # max_genes is a vector of max_genes of dimensions
+        max_genes = np.max([subpop[0].genes[i] for i in range(len(subpop[0].genes))], axis=0)
+        min_genes = np.min([subpop[0].genes[i] for i in range(len(subpop[0].genes))], axis=0)
         new_subpop = []
-        for _searcher in self.searcher:
-            _searcher.reset()
-        rand_ind = subpop[0]
-        rand_ind.genes += np.random.rand() * 0.1 
-        rand_ind.genes = np.clip(rand_ind.genes, 0, 1)
-        rand_ind.skill_factor = subpop[0].skill_factor
-        rand_ind.cal_fitness(self.list_tasks)
-        new_subpop.append(rand_ind)
-        while len(new_subpop) != len(subpop):
-            new_ind = Individual(subpop[0].MAX_NVARS, subpop[0].MAX_OBJS)
-            new_ind.init()
-            new_ind.skill_factor = subpop[0].skill_factor
+        subpop.sort(key = lambda ind: ind.fitness[ind.skill_factor-1])
+        for k, ind in enumerate(subpop):
+            rank_here = len(subpop) + 1 - k
+            new_ind = copy.deepcopy(ind)
+            new_ind.genes = max_genes + min_genes - ind.genes
+            sigma = (max_genes - min_genes) / rank_here
+            new_ind.genes = new_ind.genes + sigma * np.random.randn(len(new_ind.genes))
+            new_ind.genes = np.clip(new_ind.genes, 0, 1)
             new_ind.cal_fitness(self.list_tasks)
             new_subpop.append(new_ind)
+
+
+
         return new_subpop
 
 

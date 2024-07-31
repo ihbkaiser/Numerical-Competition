@@ -1,5 +1,4 @@
-from GNBG import GNBG
-import numpy as np
+from gnbg_func.GNBG import *
 from tqdm import tqdm
 def DE(idx, MAX_FES):
     problem = GNBG(idx)

@@ -5,7 +5,7 @@ from tqdm import tqdm
 from learnrmp import learn_rmp
 class Parameter:
     reps = 30
-    MAX_FEs = 60000
+    MAX_FEs = 500000
     numRecords = 1000
     SUBPOPULATION = 100
     SIZE_POPULATION = 1000
@@ -21,8 +21,8 @@ class Parameter:
     num_fitness = 0
     countFitness = None
     o_rmp = None  
-    FEs = None
-    FEl = None
+    FEs = 0
+    FEl = np.zeros(1)
 
     @staticmethod
     def initialize_o_rmp():
@@ -69,15 +69,30 @@ class Population:
         self.pop = []
         self.prob = func_list
         self.das_prob = None
-    def init(self):
-        for i in range(self.SIZEPOP):
-            ind = Individual(self.SIZE_GENES, self.NUM_TASKS)
-            ind.init()
-            for t in range(1, self.NUM_TASKS + 1):
-                ind.fitness[t - 1] = self.prob[t-1](ind.genes)
-                Parameter.FEs = Parameter.FEs + 1
-                Parameter.FEl[t-1] = Parameter.FEl[t-1] + 1
-            self.pop.append(ind)
+    def init(self, opposition = False):
+        if not opposition:
+            for i in range(self.SIZEPOP):
+                ind = Individual(self.SIZE_GENES, self.NUM_TASKS)
+                ind.init()
+                for t in range(1, self.NUM_TASKS + 1):
+                    ind.fitness[t - 1] = self.prob[t-1](ind.genes)
+                    Parameter.FEs = Parameter.FEs + 1
+                    Parameter.FEl[t-1] = Parameter.FEl[t-1] + 1
+                self.pop.append(ind)
+        else:
+            for i in range(self.SIZEPOP):
+                ind1 = Individual(self.SIZE_GENES, self.NUM_TASKS)
+                ind1.init()
+                ind2 = Individual(self.SIZE_GENES, self.NUM_TASKS)
+                ind2.genes = 1 - ind1.genes
+                for t in range(1, self.NUM_TASKS + 1):
+                    ind1.fitness[t - 1] = self.prob[t-1](ind1.genes)
+                    ind2.fitness[t - 1] = self.prob[t-1](ind2.genes)
+                    Parameter.FEs = Parameter.FEs + 2
+                    Parameter.FEl[t-1] = Parameter.FEl[t-1] + 2
+                    best_ind = ind1 if ind1.fitness[t - 1] < ind2.fitness[t - 1] else ind2
+                self.pop.append(best_ind)
+                
     def get_subpops(self):
         subpops = []
         for i in range(1, len(self.prob) + 1):

@@ -16,6 +16,7 @@ class EMEBI:
         self.base_rmp = BASE_rmp
         self.gen_length = gen_length
         self.MAX_FES = MAX_FES
+        self.stay = 0
         self.delta = None 
         self.s_rmp = None
         self.rmp = np.full((len(prob), len(prob)), BASE_rmp)
@@ -30,14 +31,12 @@ class EMEBI:
         self.phasethree = phasethree
         self.das_crossover = das_crossover
     def run(self, checkpoint = None):
+        stay = 0
         np.fill_diagonal(self.rmp, 0)
-        
-        Parameter.FEl = np.zeros((len(self.prob)))
-        Parameter.FEs = 0
         best = []
         if checkpoint is None:
             pop = Population(sum(self.inds_tasks), self.gen_length, self.prob)
-            pop.init()
+            pop.init(opposition=True)
             pop.update_scalar_fitness()
             D0, _, _ = pop.calculateD()
         if checkpoint is not None:
@@ -49,6 +48,7 @@ class EMEBI:
             self.log[i].append([Parameter.FEl[i], this_pop_result[i]])
         progress_bar = tqdm(total=self.MAX_FES, unit = 'FEs', unit_scale = True)
         MFEAc = MFEA(self.prob, 100, None, 0.3, 30, 100000)
+        former_FEs = Parameter.FEs
         while True:
             
 
@@ -61,7 +61,7 @@ class EMEBI:
             pop.pop.extend(offsprings)
             if self.dynamic_pop:
                 self.inds_tasks = [int(
-                    int(max((self.min_popsize - self.max_popsize) * (Parameter.FEs/self.MAX_FES) + self.max_popsize, self.min_popsize))
+                    int(max((self.min_popsize - self.max_popsize) * ((Parameter.FEs - former_FEs)/(self.MAX_FES - former_FEs)) + self.max_popsize, self.min_popsize))
                 )] * len(self.prob)
             pop.selection_EMEBI(self.inds_tasks)  #each skill-factor choose some best
             # pop.update_scalar_fitness()                 # choose best of the whole pop using scalar-fitness
@@ -83,6 +83,7 @@ class EMEBI:
             if self.phasethree:
                 self.phaseTwo(D0, pop)
             new_fes = Parameter.FEs
+            
             if Parameter.FEs <= self.MAX_FES:
                 this_pop_result = pop.get_result()
                 for i in range(len(self.prob)):
@@ -95,6 +96,8 @@ class EMEBI:
             else:
                 break
         return self.log, pop
+    def restart(self, pop):
+        self.inds_tasks = [self.base_popsize] * len(self.prob)
             
 
 

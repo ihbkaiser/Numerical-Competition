@@ -6,6 +6,7 @@ from GNBG import GNBG
 import copy
 from scipy.optimize import fmin_l_bfgs_b
 from decimal import Decimal
+from typing import override
 class jSO:
     def __init__(self, prob, survival_rate = None, H = 6, best_rate = 0.1):
         self.prob = prob
@@ -155,7 +156,8 @@ class Mutation:
         self.survival_rate = survival_rate if survival_rate is not None else 0
         self.prob = prob
         self.key = random.random()
-    def mutation_ind(self, parent):
+ 
+    def mutation_ind(self,parent):
         p = parent.genes 
         mp = float(1. / p.shape[0])
         u = np.random.uniform(size=[p.shape[0]])
@@ -194,6 +196,9 @@ class Mutation:
         
         return new_pool
 
+
+
+
 class DE:
     def __init__(self, init_F, init_CR, prob, survival_rate = None, H = 6, best_rate = 0.1 ):
         self.prob = prob
@@ -205,8 +210,10 @@ class DE:
         self.s_cr = []
         self.s_f = []
         self.diff_f = []
+        self.archive = []
         self.mem_pos = 0
         self.key = random.random()
+        self.archive_rate = 1.3
     
     def generateFCR(self, m_f, m_cr):
         while True:
@@ -250,6 +257,7 @@ class DE:
                 self.diff_f.append(ind.fitness[ind.skill_factor-1] - new_ind.fitness[new_ind.skill_factor-1])
                 self.s_cr.append(cr)
                 self.s_f.append(f)
+                self.archive.append(ind)
                 new_pool.append(new_ind)
                 accumulate_diff += ind.fitness[ind.skill_factor-1] - new_ind.fitness[new_ind.skill_factor-1]
 
@@ -272,7 +280,10 @@ class DE:
         weight = diff_f/sum_diff
         tu = sum(weight * s_cr * s_cr)
         mau = sum(weight * s_cr)
-        return tu/mau
+        if(mau != 0):
+            return tu/mau
+        else:
+            return 0
     def updateMemoryF(self, diff_f, s_f):
         diff_f = np.array(diff_f)
         s_f = np.array(s_f)
@@ -281,7 +292,10 @@ class DE:
         weight = diff_f/sum_diff
         tu = sum(weight * s_f * s_f)
         mau = sum(weight * s_f)
-        return tu/mau
+        if(mau!=0):
+            return tu/mau
+        else:
+            return 0
     def updateMemory(self):
         if len(self.s_cr) > 0:
             self.mem_cr[self.mem_pos] = self.updateMemoryCR(self.diff_f, self.s_cr)
@@ -480,3 +494,110 @@ class LBFGSB:
     def reset(self):
         pass
 
+class MultiDE(DE):
+    def __init__(self, init_F, init_CR, prob, survival_rate = None, H = 6, best_rate = 0.1 ):
+        super().__init__(init_F, init_CR, prob, survival_rate, H, best_rate)
+        self.archive = []
+        self.operators = [self.operator1, self.operator2, self.operator3]
+    @override
+    def generateFCR(self, m_f, m_cr):
+        while True:
+            f = np.random.normal(loc=m_f, scale=0.1)
+            cr = cauchy.rvs(loc=m_cr, scale=0.1, size=1)[0]
+            cr = np.clip(cr, 0, 1)
+            if f>0:
+                break
+        return min(f,1), min(cr,1)
+    def operator1(self, pool, ind, cr, f, best):
+        pbest = best[random.randint(0, len(best) - 1)]
+        rand_idx = np.random.choice(len(pool), 2, replace=False)
+        ind_ran1, ind_ran2 = pool[rand_idx[0]], pool[rand_idx[1]]
+        u = (np.random.uniform(0, 1, size=(len(ind.genes)) ) <= cr)
+        u[np.random.choice(len(ind.genes))] = True
+
+        new_genes = np.where(u, 
+            pbest.genes + f * (ind_ran1.genes - ind_ran2.genes),
+            ind.genes
+        )
+        for j in range(len(new_genes)):
+                if new_genes[j] > 1:
+                    new_genes[j] = (1 + ind.genes[j]) / 2
+                elif new_genes[j] < 0:
+                    new_genes[j] = ind.genes[j] / 2
+        new_ind = Individual(ind.MAX_NVARS, ind.MAX_OBJS)
+        new_ind.genes = new_genes
+        new_ind.skill_factor = ind.skill_factor
+        new_ind.cal_fitness(self.prob)
+        return new_ind
+    def operator2(self, pool, ind, cr, f, best):
+        pbest = best[random.randint(0, len(best) - 1)]
+        ind_ran1 = pool[random.randint(0, len(pool) - 1)]
+        ind_ran2 = random.choices(pool + self.archive, k=1)[0]
+        u = (np.random.uniform(0, 1, size=(len(ind.genes)) ) <= cr)
+        u[np.random.choice(len(ind.genes))] = True
+        trial_vector = ind.genes + f*(pbest.genes - ind.genes + ind_ran1.genes- ind_ran2.genes)
+        new_genes = np.where(u, trial_vector, ind.genes)
+        for j in range(len(new_genes)):
+                if new_genes[j] > 1:
+                    new_genes[j] = (1 + ind.genes[j]) / 2
+                elif new_genes[j] < 0:
+                    new_genes[j] = ind.genes[j] / 2
+        new_ind = Individual(ind.MAX_NVARS, ind.MAX_OBJS)
+        new_ind.genes = new_genes
+        new_ind.skill_factor = ind.skill_factor
+        new_ind.cal_fitness(self.prob)
+        return new_ind
+    def operator3(self, pool, ind, cr, f, best):
+        pbest = best[random.randint(0, len(best) - 1)]
+        ind_ran1, ind_ran3 = random.choices(pool, k=2)
+        ind_ran2 = random.choices(pool + self.archive, k=1)[0]
+        u = (np.random.uniform(0, 1, size=(len(ind.genes)) ) <= cr)
+        u[np.random.choice(len(ind.genes))] = True
+        trial_vector = ind_ran3.genes - f * (pbest.genes - ind.genes + ind_ran1.genes - ind_ran2.genes)
+        new_genes = np.where(u, trial_vector, ind.genes)
+        for j in range(len(new_genes)):
+                if new_genes[j] > 1:
+                    new_genes[j] = (1 + ind.genes[j]) / 2
+                elif new_genes[j] < 0:
+                    new_genes[j] = ind.genes[j] / 2
+        new_ind = Individual(ind.MAX_NVARS, ind.MAX_OBJS)
+        new_ind.genes = new_genes
+        new_ind.skill_factor = ind.skill_factor
+        new_ind.cal_fitness(self.prob)
+        return new_ind
+    # def operator4(self, pool, ind, cr, f, best):
+    #     new_ind = Mutation.mutation_ind(ind)
+    #     return new_ind
+
+    def search(self, pool):
+        pool.sort(key = lambda ind: ind.fitness[ind.skill_factor-1])
+        best = pool[: max( int(0.1*len(pool)), 2 )]
+        new_pool = []
+        accumulate_diff = 0
+        old_FEs = Parameter.FEs
+        for ind in pool:
+            r = random.randint(0, self.H - 1)
+            f, cr = self.generateFCR(self.mem_f[r], self.mem_cr[r])
+            operator = random.choice(self.operators)
+            new_ind = operator(pool, ind, cr, f, best)
+            if ind.fitness[ind.skill_factor-1] > new_ind.fitness[new_ind.skill_factor-1]:
+                self.diff_f.append(ind.fitness[ind.skill_factor-1] - new_ind.fitness[new_ind.skill_factor-1])
+                self.s_cr.append(cr)
+                self.s_f.append(f)
+                if len(self.archive) > self.archive_rate * len(pool):
+                    self.archive.sort(key = lambda ind: ind.fitness[ind.skill_factor-1])
+                    self.archive = self.archive[: (int(self.archive_rate * len(pool)) - 1)]
+                self.archive.append(ind)
+                new_pool.append(new_ind)
+                accumulate_diff += ind.fitness[ind.skill_factor-1] - new_ind.fitness[new_ind.skill_factor-1]
+
+            else:
+                new_pool.append(ind)
+        # print max fitness of new_pool 
+        min_fitness1 = min(ind.fitness[ind.skill_factor-1] for ind in pool)
+        min_fitness = min(ind.fitness[ind.skill_factor-1] for ind in new_pool)
+        assert min_fitness <= min_fitness1, f'Fitness of new pool: {min_fitness} <= old pool:{min_fitness1} ???'
+        new_FEs = Parameter.FEs
+        self.effective = accumulate_diff / (new_FEs - old_FEs)
+        self.updateMemory()
+        return new_pool
