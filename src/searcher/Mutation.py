@@ -1,5 +1,7 @@
 import random
 import numpy as np
+import sys, os
+sys.path.append(os.path.dirname(__file__))
 from utils.Parameter import *
 from utils.Individual import Individual
 class Mutation:

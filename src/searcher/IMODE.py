@@ -1,7 +1,7 @@
 import random
 import numpy as np
-from scipy.stats import cauchy
 from utils.Individual import Individual
+from scipy.stats import cauchy
 class IMODE:
     def __init__(self, init_F, init_CR, prob, survival_rate = None, H = 6, best_rate = 0.1, arc_rate = 2.6 ):
         self.prob = prob

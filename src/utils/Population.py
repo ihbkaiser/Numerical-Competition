@@ -1,5 +1,5 @@
-from utils.Individual import *
-from utils.Parameter import *
+from Individual import *
+from Parameter import *
 class Population:
     def __init__(self, SIZEPOP, SIZEGENES, prob, **kwargs):
         self.SIZEPOP = SIZEPOP

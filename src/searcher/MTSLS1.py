@@ -1,10 +1,13 @@
 import numpy as np
 import copy
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
 from utils.Individual import Individual
 class MTSLS1:
     def __init__(self, prob):
         self.prob = prob
-        self.SR = np.array([0.2]*30)
+        self.SR = np.array([0.2]*prob.dim)
         self.effective = float('inf')
     def __mtsls_improve_dim(self, sol, i, SR):
         best_fitness = sol.fitness

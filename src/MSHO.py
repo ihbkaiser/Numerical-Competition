@@ -4,7 +4,7 @@ from utils.Parameter import *
 from utils.Population import *
 from searcher.SSA import *
 class MSHO:
-    def __init__(self, name, prob, gen_length, MAX_FES, BASE_POPSZ=60, BASE_rmp=0.3, update_rate = 0.06, learning=True, dynamic_pop=True, phasethree=False):
+    def __init__(self, name, prob, gen_length, MAX_FES, new_LS=True, BASE_POPSZ=60, BASE_rmp=0.3, update_rate = 0.06, learning=True, dynamic_pop=True, phasethree=False):
         self.name = name
         self.gnbg = prob
         self.prob = prob
@@ -18,7 +18,10 @@ class MSHO:
         self.delta = None 
         self.s_rmp = None
         self.update_rate = update_rate
-        self.learningPhase = LearningPhaseILS(self.prob)
+        if new_LS:
+            self.learningPhase = LearningPhaseILSVer2(self.prob)
+        else:
+            self.learningPhase = LearningPhaseILS(self.prob)
         self.learningPhase2 = LearningPhase(is_start = True, prob=self.prob) 
         self.learning = learning
         self.dynamic_pop = dynamic_pop
@@ -55,7 +58,7 @@ class MSHO:
             pop.selection_EMEBI(self.inds_tasks) 
             # 3. Employ phaseThree(like phase2 in EME-BI) 
             # and phaseTwo(local search the best individual)
-            pop = self.phaseTwo(pop)
+            #pop = self.phaseTwo(pop)
             pop = self.phaseThree(pop)
             new_fes = self.prob.FE
             if self.prob.FE > self.prob.max_FE:
@@ -63,12 +66,12 @@ class MSHO:
                 print(f'After {self.prob.aceps}, found error: {self.prob.best_val - self.prob.opt_value}')
                 break
             # 4. If satisfy some condition, then use ASSA
-            if self.prob.FE > 100000:
-                pop.pop.sort(key = lambda ind: ind.fitness)
-                assa = ASSA(n = 50, max_iters = 10000,maxFes= 500000, opt_value = self.prob.opt_value,nmin = 20, dim = self.prob.dim, lb = self.prob.LB, ub=self.prob.UB)
-                x,y = assa.optimize(self.prob.fitness_of_ind)
+            # if self.prob.FE > 500000:
+            #     pop.pop.sort(key = lambda ind: ind.fitness)
+            #     assa = ASSA(n = 50, max_iters = 10000,maxFes= 500000, opt_value = self.prob.opt_value,nmin = 20, dim = self.prob.dim, lb = self.prob.LB, ub=self.prob.UB)
+            #     x,y = assa.optimize(self.prob.fitness_of_ind)
         
-        return f'{self.prob.best_val - self.prob.opt_value} {self.prob.aceps}'
+        return self.prob.best_val - self.prob.opt_value, self.prob.aceps
 
 
 
@@ -94,7 +97,8 @@ class MSHO:
     def phaseTwo(self, pop):
         newPop = []
         # evolve(pop, DE_evals , LS_evals)
-        nextPop = self.learningPhase.evolve(pop.pop, 1000, 1000)
+        nextPop = self.learningPhase.evolve(pop.pop, 1000, 100)
+        # nextPop = self.learningPhase.evolve(pop.pop, 1000)
         newPop.extend(nextPop)
         pop.pop = newPop
         return pop
