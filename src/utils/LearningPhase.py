@@ -5,9 +5,11 @@ from searcher.MTSLS1 import *
 from searcher.LBFGSB import *
 from searcher.MutationLS import *
 from searcher.IMODE import *
+from searcher.IMODE_LLM import *
 from searcher.Mutation import *
 from searcher.jSO import *
 from SubPop import *
+from utils.GeminiModel import Gemini
 import random
 class LearningPhase():
     M = 2   #number of operators
@@ -56,8 +58,8 @@ class LearningPhaseILS():
     def __init__(self, prob):
         self.prob = prob
         self.searcher = [MTSLS1(prob), LBFGSB2(prob), MutationLS(prob)]
-        # self.explorer = IMODE(0.5,0.5,prob) 
-        self.explorer = jSO(prob)
+        self.explorer = IMODE_LLM(0.5,0.5,prob) 
+        # self.explorer = jSO(prob)
         self.stay = 0
         self.use_restart = True
         self.grad_threshold = 30
@@ -154,6 +156,107 @@ class LearningPhaseILSVer2():
                 subpop[0] = new_ind
         return subpop
         
+class LearningPhaseLLM:
+    def __init__(self, prob):
+        self.prob = prob
+        self.explorer = IMODE(0.5, 0.5, prob)
+        self.searchers = {
+            'MTSLS1': MTSLS1(prob),
+            'LBFGSB2': LBFGSB2(prob),
+            'MutationLS': MutationLS(prob)
+        }
+        self.ls_counts = {name: 0 for name in self.searchers}
+        self.ls_effective = {name: 0.0 for name in self.searchers}
+        self.ls_lastFE = {name: 0 for name in self.searchers}
+        # Restart config
+        self.use_restart = True
+        self.grad_threshold = 30.0
+        self.llm = Gemini(temperature=0) 
+
+    def evolve(self, subpop, DE_evals, LS_evals):
+        max_fe = self.prob.FE + DE_evals
+        while self.prob.FE < max_fe:
+            subpop = self.explorer.search(subpop)
+
+        subpop.sort(key=lambda ind: ind.fitness)
+
+        for name, searcher in self.searchers.items():
+            self.ls_effective[name] = searcher.effective or 0.0
+
+        router_stats = []
+        for name in self.searchers:
+            router_stats.append({
+                'name': name,
+                'usage': self.ls_counts[name],
+                'effective': self.ls_effective[name],
+                'last_FE': self.ls_lastFE[name]
+            })
+
+        prompt = (
+            "You are a router deciding which local search method to apply next.\n"
+            f"Here are stats for the three methods:\n{json.dumps(router_stats, indent=2)}\n"
+            "Task: Select one method to use next, balancing equal usage counts, recent performance improvements, "
+            "and considering FE budget used previously.\n"
+            "IMPORTANT: Return strictly a JSON object with keys 'method' and 'explanation'. "
+            "Explanation should start with 'Let's think step by step:'."
+        )
+
+        try:
+            text, _, _ = self.llm.prompt([{'content': prompt}])
+            raw = text.strip()
+            start = raw.find('{')
+            end = raw.rfind('}')
+            json_str = raw[start:end+1] if start != -1 and end != -1 else raw
+            print(f"================LLM response: {text}======================")
+            choice = json.loads(json_str)
+            method_name = choice['method']
+            explanation = choice.get('explanation', '')
+            print(f"=== LLM routing decision: {method_name} ===")
+            if method_name not in self.searchers:
+                raise KeyError('Invalid method')
+        except Exception as e:
+            print(f"LLM routing failed: {e}. Using fallback strategy.")
+            sorted_ls = sorted(
+                self.ls_counts.items(),
+                key=lambda kv: (kv[1], -self.ls_effective[kv[0]])
+            )
+            method_name = sorted_ls[0][0]
+            explanation = (
+                "Let's think step by step: LLM routing failed or invalid. "
+                "Choosing method with lowest usage and best recent performance."
+            )
+
+
+        self.ls_counts[method_name] += 1
+        self.ls_lastFE[method_name] = LS_evals
+
+        best_ind = subpop[0]
+        ls = self.searchers[method_name]
+        improved = ls.search(best_ind, LS_evals)
+        subpop[0] = improved
+
+        # Optional restart
+        if self.use_restart:
+            ind = copy.deepcopy(subpop[0])
+            x0 = np.random.uniform(-100, 100, size=len(ind.genes))
+            bounds = [(-100, 100)] * len(ind.genes)
+            sol2, fit2, info2 = fmin_l_bfgs_b(
+                self.prob.fitness_of_ind,
+                x0,
+                approx_grad=True,
+                bounds=bounds,
+                maxfun=LS_evals,
+                factr=10
+            )
+            if fit2 < subpop[0].fitness:
+                subpop[0].genes = sol2
+                subpop[0].fitness = fit2
+            grad = info2.get('grad')
+            # gradient too high --> noise problem
+            if grad is not None and np.linalg.norm(grad) > self.grad_threshold:
+                self.use_restart = False
             
+
+        return subpop
         
     
