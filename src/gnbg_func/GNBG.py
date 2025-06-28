@@ -17,6 +17,7 @@ class GNBG:
         self.opt_value = self.GNBG['OptimumValue'][0][0][0][0]
         self.opt_position = self.GNBG['OptimumPosition'][0][0]
         self.best_val = np.inf
+        self.best_x = None
         self.FE = 0
         self.aceps = np.inf
         self.fitness_map = {}
@@ -112,7 +113,9 @@ class GNBG:
 
         
         result = np.min(f)
-        self.best_val = min(self.best_val, result)
+        if result < self.best_val:
+            self.best_x = X.reshape(-1).copy()
+            self.best_val = result
         # add result and corresponding genes to the map
         # genes_hash = hashlib.sha256(X.tobytes()).hexdigest()
         # self.fitness_map[genes_hash] = result

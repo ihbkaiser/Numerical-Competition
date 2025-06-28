@@ -21,7 +21,7 @@ class MSHO:
         if new_LS:
             self.learningPhase = LearningPhaseILSVer2(self.prob)
         else:
-            self.learningPhase = LearningPhaseILS(self.prob)
+            self.learningPhase = LearningPhaseLLM(self.prob)
         self.learningPhase2 = LearningPhase(is_start = True, prob=self.prob) 
         self.learning = learning
         self.dynamic_pop = dynamic_pop
@@ -58,10 +58,10 @@ class MSHO:
             pop.selection_EMEBI(self.inds_tasks) 
             # 3. Employ phaseThree(like phase2 in EME-BI) 
             # and phaseTwo(local search the best individual)
-            #pop = self.phaseTwo(pop)
+            pop = self.phaseTwo(pop)
             pop = self.phaseThree(pop)
             new_fes = self.prob.FE
-            if self.prob.FE > self.prob.max_FE:
+            if self.prob.FE > self.prob.max_FE or (self.prob.best_val - self.prob.opt_value) < 1e-8:
                 pop.pop.sort(key = lambda ind: ind.fitness)
                 print(f'After {self.prob.aceps}, found error: {self.prob.best_val - self.prob.opt_value}')
                 break
@@ -71,7 +71,7 @@ class MSHO:
             #     assa = ASSA(n = 50, max_iters = 10000,maxFes= 500000, opt_value = self.prob.opt_value,nmin = 20, dim = self.prob.dim, lb = self.prob.LB, ub=self.prob.UB)
             #     x,y = assa.optimize(self.prob.fitness_of_ind)
         
-        return self.prob.best_val - self.prob.opt_value, self.prob.aceps
+        return self.prob.best_val - self.prob.opt_value, self.prob.aceps, self.prob.best_x
 
 
 
